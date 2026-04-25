@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { kv } from "@vercel/kv";
 import { requireBearer } from "@/lib/auth";
-import { keys } from "@/lib/kv";
+import { getStatus } from "@/lib/kv";
 import { STAGES } from "@/lib/types";
 
 const Body = z.object({
@@ -15,12 +14,6 @@ const Body = z.object({
   timeoutMs: z.number().int().min(1000).max(20_000).default(10_000),
 });
 
-interface StatusEntry {
-  latest: string;
-  history: string[];
-  // Future: type-tagged history. For now, a 'done'/'error' detail begins with [done] / [error].
-}
-
 export async function POST(req: Request) {
   const unauth = requireBearer(req);
   if (unauth) return unauth;
@@ -31,12 +24,11 @@ export async function POST(req: Request) {
   }
   const { callSid, stage, minUpdates, until, timeoutMs } = parsed.data;
 
-  const key = keys.status(callSid, stage);
   const deadline = Date.now() + timeoutMs;
   const pollMs = 200;
 
   while (Date.now() < deadline) {
-    const entry = await kv.get<StatusEntry>(key);
+    const entry = await getStatus(callSid, stage);
     if (entry && entry.history.length >= minUpdates) {
       const lastDetail = entry.latest;
       const isDone = lastDetail?.startsWith("[done]");
