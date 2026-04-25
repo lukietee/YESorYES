@@ -1,0 +1,39 @@
+# deps
+node_modules/
+.pnp
+.pnp.js
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# build
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+.env.shared
+
+# vercel
+.vercel
+
+# fly
+.fly/
+
+# vision
+vision/roi.json
+vision/captures/
+
+# logs
+*.log
+.DS_Store
+
+# editor
+.vscode/
+.idea/
