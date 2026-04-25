@@ -48,15 +48,20 @@ def make_pusher() -> Pusher:
     )
 
 
-def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.ndarray]:
+def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.ndarray, np.ndarray]:
     warped = cv2.warpPerspective(frame, M, (cfg["warp_w"], cfg["warp_h"]))
     hsv = cv2.cvtColor(warped, cv2.COLOR_BGR2HSV)
     low = np.array(cfg["hsv_low"])
     high = np.array(cfg["hsv_high"])
     mask = cv2.inRange(hsv, low, high)
-    kernel = np.ones((3, 3), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    open_k = np.ones((3, 3), np.uint8)
+    close_k = np.ones((15, 15), np.uint8)
+    # Open with small kernel to drop salt-and-pepper noise, then aggressive
+    # close + dilate so nearby blobs (one fruit split by glare/reflection)
+    # fuse into a single contour.
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, open_k, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_k, iterations=3)
+    mask = cv2.dilate(mask, np.ones((7, 7), np.uint8), iterations=1)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     midline = cfg["warp_w"] // 2
@@ -86,7 +91,7 @@ def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.nd
     cv2.putText(viz, f"L:{L}  R:{R}", (12, 32),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
 
-    return L, R, viz
+    return L, R, viz, mask
 
 
 def main() -> None:
@@ -123,7 +128,7 @@ def main() -> None:
             if not ok:
                 continue
 
-            L, R, viz = detect(frame, cfg, M)
+            L, R, viz, mask = detect(frame, cfg, M)
             if forced is not None:
                 L, R = forced
 
