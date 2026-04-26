@@ -97,3 +97,12 @@ export async function appendStatus(s: AgentStatus) {
 export async function getCurrentCallSid() {
   return (await redis().get(keys.currentCall())) ?? null;
 }
+
+export async function clearAll() {
+  const r = redis();
+  const stream = r.scanStream({ match: "call:*", count: 200 });
+  for await (const batch of stream) {
+    if (batch.length) await r.del(...(batch as string[]));
+  }
+  await r.del(keys.currentCall());
+}

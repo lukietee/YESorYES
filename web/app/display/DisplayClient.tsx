@@ -149,6 +149,7 @@ export function DisplayClient() {
         setOptions(null);
         setDecision(null);
         setStatusHistory([]);
+        fetch("/api/state", { method: "DELETE" }).catch(() => {});
       }
     };
     window.addEventListener("keydown", onKey);

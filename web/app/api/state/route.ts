@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import {
+  clearAll,
   getCurrentCallSid,
   getDecision,
   getOptions,
   getStage,
 } from "@/lib/kv";
+
+export async function DELETE() {
+  await clearAll();
+  return NextResponse.json({ ok: true });
+}
 
 export async function GET() {
   const callSid = await getCurrentCallSid();
