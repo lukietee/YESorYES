@@ -55,7 +55,7 @@ def update_preview(viz: np.ndarray) -> None:
         _latest_jpeg = buf.tobytes()
 
 
-class _MJPEGHandler(BaseHTTPRequestHandler):
+class _PreviewHandler(BaseHTTPRequestHandler):
     def log_message(self, *_):  # silence stdlib access logs
         pass
 
@@ -69,9 +69,34 @@ class _MJPEGHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        if self.path != "/stream.mjpg":
+        # /frame.jpg → latest single JPEG (browser polls this on a timer)
+        # /stream.mjpg → multipart stream (kept for non-browser tools / fallback)
+        if self.path.startswith("/frame.jpg"):
+            self._serve_single_jpeg()
+        elif self.path.startswith("/stream.mjpg"):
+            self._serve_mjpeg()
+        else:
             self.send_error(404)
+
+    def _serve_single_jpeg(self) -> None:
+        with _frame_lock:
+            jpeg = _latest_jpeg
+        if jpeg is None:
+            self.send_error(503, "no frame yet")
             return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(jpeg)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self._send_cors()
+        self.end_headers()
+        try:
+            self.wfile.write(jpeg)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _serve_mjpeg(self) -> None:
         self.send_response(200)
         self.send_header("Cache-Control", "no-cache, private")
         self.send_header("Pragma", "no-cache")
@@ -106,10 +131,11 @@ class _ThreadingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 
 def start_preview_server() -> None:
-    server = _ThreadingServer(("0.0.0.0", PREVIEW_PORT), _MJPEGHandler)
+    server = _ThreadingServer(("0.0.0.0", PREVIEW_PORT), _PreviewHandler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    print(f"preview MJPEG at http://localhost:{PREVIEW_PORT}/stream.mjpg")
+    print(f"preview at http://localhost:{PREVIEW_PORT}/frame.jpg (poll) "
+          f"and /stream.mjpg (multipart)")
 
 
 def load_cfg() -> dict:
