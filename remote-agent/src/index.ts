@@ -1,8 +1,11 @@
 import "dotenv/config";
 import { createRequire } from "module";
 import { runStage } from "./computerUse.js";
+import { runScripted } from "./scriptedRunner.js";
 import { postStatus } from "./status.js";
 import type { Stage } from "./stages/index.js";
+
+const USE_SCRIPTED = (process.env.USE_SCRIPTED ?? "true").toLowerCase() !== "false";
 
 // pusher-js's default entry is the browser bundle. Use the Node entry, and
 // resolve via createRequire so the CJS constructor isn't wrapped by ESM.
@@ -32,10 +35,12 @@ function main() {
   });
 
   const channel = pusher.subscribe("agent-tasks");
+  const runner = USE_SCRIPTED ? runScripted : runStage;
+  console.log(`[agent] runner=${USE_SCRIPTED ? "scripted (Playwright)" : "computer-use (Claude Sonnet)"}`);
   channel.bind("dispatch", (task: AgentTask) => {
     console.log(`[agent-tasks] received: stage=${task.stage} chosen=${task.chosen} taskId=${task.taskId}`);
-    runStage(task).catch(async (e) => {
-      console.error("runStage failed", e);
+    runner(task).catch(async (e) => {
+      console.error("runner failed", e);
       await postStatus({
         taskId: task.taskId,
         callSid: task.callSid,
