@@ -54,11 +54,14 @@ export async function runBrainTurn(
     // ear in this sub-turn. Without this gate, "voting now ... and the
     // winner is X" can leak post-tool speculation into pre-tool audio.
     let seenToolUse = false;
+    let textDeltasEmitted = 0;
+    let firstToolName: string | null = null;
     for await (const event of stream) {
       if (event.type === "content_block_start") {
         if (event.content_block.type === "tool_use") {
           if (seenToolUse) continue; // ignore second tool_use start
           seenToolUse = true;
+          firstToolName = event.content_block.name;
           handle.onToolStart?.(event.content_block.name);
         }
       } else if (event.type === "content_block_delta") {
@@ -66,6 +69,7 @@ export async function runBrainTurn(
         const delta = event.delta;
         if (delta.type === "text_delta") {
           handle.onTextDelta(delta.text);
+          textDeltasEmitted++;
         }
       }
     }
@@ -104,6 +108,20 @@ export async function runBrainTurn(
     // model is forced to re-emit it on the next iteration with its own
     // pre-tool narration based on the latest tool_result.
     const tu = toolUses[0];
+
+    // Fallback narration: if Claude is about to call a tool with NO
+    // preceding text (especially common on dispatch_action right after
+    // wait_for_decision returns), synthesize a one-liner from the tool
+    // input so the caller doesn't hear silence. This is a structural
+    // safety net under the persona's narration rule.
+    if (textDeltasEmitted === 0) {
+      const fallback = synthesizeFallbackLine(tu.name, tu.input as Record<string, unknown>);
+      if (fallback) {
+        console.log(`[claude] no-text fallback for ${tu.name}: ${fallback}`);
+        handle.onTextDelta(fallback);
+      }
+    }
+
     const result = await runTool(callSid, tu.name, tu.input as Record<string, unknown>);
     const toolResults: Anthropic.ToolResultBlockParam[] = [
       {
@@ -115,4 +133,19 @@ export async function runBrainTurn(
     conversation.push({ role: "user", content: toolResults });
     // Loop again to let the model produce its narration after the tool call.
   }
+}
+
+function synthesizeFallbackLine(
+  toolName: string,
+  input: Record<string, unknown>,
+): string | null {
+  if (toolName === "dispatch_action") {
+    const text = (input.text as string) ?? "";
+    if (text) return `${text.toLowerCase()}, here we go.`;
+    return "here we go, dingus.";
+  }
+  if (toolName === "wait_for_decision") return "voting now.";
+  if (toolName === "present_options") return "options incoming, dingus.";
+  if (toolName === "wait_for_agent_status") return "watch this.";
+  return null;
 }
