@@ -37,14 +37,15 @@ export function registerTwilioStream(app: FastifyInstance) {
       return tts;
     };
 
-    // Closes the current TTS WS (sending EOS) and clears the reference.
-    // Used between sub-turns of a brain turn so the next text deltas open
-    // a fresh ElevenLabs session — re-using the session after EOS would
-    // silently drop audio because stream-input WSes close on EOS.
+    // Ends the current TTS sub-turn: send EOS so ElevenLabs finalizes the
+    // current utterance + drains its remaining audio frames, then DETACH
+    // the reference (don't close the WS — let it die on its own once the
+    // last audio chunk is delivered). Subsequent text deltas land on a
+    // fresh session via the lazy onTextDelta handler. We never re-use a
+    // session after EOS because stream-input WSes terminate on it.
     const endTtsSession = () => {
       if (!tts) return;
       tts.flush();
-      tts.close();
       tts = null;
     };
 
