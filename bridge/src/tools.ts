@@ -115,13 +115,15 @@ export async function runTool(
       return { stringified: JSON.stringify(out), raw: out };
     }
     case "wait_for_decision": {
-      // Poll up to 60s by retrying the 10s long-poll endpoint.
+      // Tighter inner long-poll (3s windows) so any failure surfaces fast
+      // instead of looking like a 10s freeze on the call. Total wait is
+      // capped to 30s overall (still plenty for a deliberation).
       const start = Date.now();
-      while (Date.now() - start < 60_000) {
+      while (Date.now() - start < 30_000) {
         const out = (await postWeb("/api/options/decision", {
           ...input,
           callSid,
-          timeoutMs: 10_000,
+          timeoutMs: 3_000,
         })) as
           | { pending: true }
           | { stage: string; chosen: "A" | "B"; text: string; vote: { L: number; R: number } };
