@@ -27,8 +27,8 @@ export function registerTwilioStream(app: FastifyInstance) {
       );
     };
 
-    const ensureTts = () => {
-      if (tts) return tts;
+    const newTtsSession = () => {
+      tts?.close();
       tts = openElevenLabs({
         voiceId: VOICE_ID,
         onAudio: sendToTwilio,
@@ -40,6 +40,7 @@ export function registerTwilioStream(app: FastifyInstance) {
     const handleFinalUtterance = async (text: string) => {
       const state = getCall(callSid);
       if (!state) return;
+      app.log.info({ text, processing }, "[brain] utterance");
       if (processing) {
         pendingTranscript += " " + text;
         return;
@@ -50,18 +51,26 @@ export function registerTwilioStream(app: FastifyInstance) {
 
       state.conversation.push({ role: "user", content: t });
 
-      const ttsSession = ensureTts();
+      const ttsSession = newTtsSession();
+      app.log.info("[brain] turn start");
       try {
         await runBrainTurn(callSid, state.conversation, {
           onTextDelta: (delta) => ttsSession.push(delta),
-          onToolStart: (name) => app.log.info({ name }, "tool_use"),
+          onToolStart: (name) => app.log.info({ name }, "[brain] tool_use"),
           onSubTurnEnd: () => ttsSession.flush(),
           onEnd: () => ttsSession.flush(),
         });
+        app.log.info("[brain] turn end ok");
       } catch (e) {
-        app.log.error({ err: e }, "brain turn failed");
+        app.log.error({ err: e }, "[brain] turn failed");
       } finally {
         processing = false;
+        if (pendingTranscript.trim()) {
+          const queued = pendingTranscript.trim();
+          pendingTranscript = "";
+          app.log.info({ queued }, "[brain] flushing pending");
+          handleFinalUtterance(queued);
+        }
       }
     };
 

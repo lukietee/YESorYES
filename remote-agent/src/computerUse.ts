@@ -5,7 +5,7 @@ import { STAGE_PROMPTS } from "./stages/index.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
-const MODEL = "claude-opus-4-7";
+const MODEL = "claude-sonnet-4-5";
 const COMPUTER_BETA = "computer-use-2025-01-24";
 const MAX_ITERATIONS = 30;
 

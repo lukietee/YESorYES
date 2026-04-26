@@ -1,8 +1,13 @@
 import "dotenv/config";
-import Pusher from "pusher-js";
+import { createRequire } from "module";
 import { runStage } from "./computerUse.js";
 import { postStatus } from "./status.js";
 import type { Stage } from "./stages/index.js";
+
+// pusher-js's default entry is the browser bundle. Use the Node entry, and
+// resolve via createRequire so the CJS constructor isn't wrapped by ESM.
+const require = createRequire(import.meta.url);
+const { Pusher } = require("pusher-js/node");
 
 interface AgentTask {
   taskId: string;

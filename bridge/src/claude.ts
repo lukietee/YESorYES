@@ -63,6 +63,7 @@ export async function runBrainTurn(
     }
 
     const finalMsg = await stream.finalMessage();
+    console.log("[claude] stop_reason=", finalMsg.stop_reason, "content=", JSON.stringify(finalMsg.content).slice(0, 500));
     conversation.push({ role: "assistant", content: finalMsg.content });
 
     const toolUses = finalMsg.content.filter(
