@@ -128,11 +128,23 @@ export async function runTool(
           | { pending: true }
           | { stage: string; chosen: "A" | "B"; text: string; vote: { L: number; R: number } };
         if (!("pending" in out)) {
-          return { stringified: JSON.stringify(out), raw: out };
+          // Format the result so Claude can't misread it. The verbose
+          // string forces it to use the actual winning text rather than
+          // guessing which option won.
+          const human =
+            `The council voted. WINNER is option_${out.chosen}. ` +
+            `You MUST speak these EXACT words to the caller as your next ` +
+            `spoken line, paraphrased naturally: "${out.text}". ` +
+            `Then call dispatch_action with chosen="${out.chosen}" and text="${out.text}". ` +
+            `Do not say the other option won. Do not invent a different winner. ` +
+            `(stage=${out.stage}, vote L:${out.vote.L} R:${out.vote.R})`;
+          return { stringified: human, raw: out };
         }
       }
-      const fallback = { error: "decision timeout" };
-      return { stringified: JSON.stringify(fallback), raw: fallback };
+      const fallback =
+        "ERROR: decision timeout — no vote arrived. Tell the caller " +
+        "the council was distracted and ask them to repeat. Do NOT call dispatch_action.";
+      return { stringified: fallback, raw: { error: "decision timeout" } };
     }
     case "dispatch_action": {
       const out = await postWeb("/api/agent/dispatch", { ...input, callSid });
