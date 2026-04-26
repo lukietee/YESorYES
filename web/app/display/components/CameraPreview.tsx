@@ -17,6 +17,7 @@ type State = "loading" | "live" | "offline";
 export function CameraPreview({ size = "md", position = "top-4 right-4" }: Props) {
   const [state, setState] = useState<State>("loading");
   const [src, setSrc] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const failures = useRef(0);
 
   useEffect(() => {
@@ -40,7 +41,6 @@ export function CameraPreview({ size = "md", position = "top-4 right-4" }: Props
         failures.current = 0;
       } catch {
         failures.current += 1;
-        // Tolerate one or two missed frames before flipping to offline
         if (failures.current >= 3) setState("offline");
       }
     };
@@ -57,11 +57,49 @@ export function CameraPreview({ size = "md", position = "top-4 right-4" }: Props
     };
   }, []);
 
+  // Escape closes the expanded view
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
+
   const dim = size === "sm" ? "w-64" : size === "lg" ? "w-[480px]" : "w-80";
 
+  // ── Expanded modal overlay ─────────────────────────────────────────────
+  if (expanded) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm cursor-zoom-out"
+        onClick={() => setExpanded(false)}
+      >
+        {src && state === "live" && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            alt="vision feed"
+            className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+          />
+        )}
+        {state !== "live" && (
+          <div className="text-slate-400 font-mono">camera offline</div>
+        )}
+        <div className="absolute top-6 left-6 text-xs font-mono uppercase tracking-widest text-slate-400/80">
+          ● live · click anywhere or press ESC to close
+        </div>
+      </div>
+    );
+  }
+
+  // ── Corner panel ────────────────────────────────────────────────────────
   return (
-    <div
-      className={`absolute ${position} ${dim} aspect-video rounded-lg border bg-black/60 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.4)] ${
+    <button
+      type="button"
+      onClick={() => setExpanded(true)}
+      className={`absolute ${position} ${dim} aspect-video rounded-lg border bg-black/60 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.4)] cursor-zoom-in transition-all hover:scale-[1.02] hover:border-glow ${
         state === "live" ? "border-slate-700" : "border-slate-800"
       }`}
     >
@@ -92,6 +130,6 @@ export function CameraPreview({ size = "md", position = "top-4 right-4" }: Props
           <div className="text-slate-700">retrying…</div>
         </div>
       )}
-    </div>
+    </button>
   );
 }
