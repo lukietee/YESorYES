@@ -57,7 +57,10 @@ export async function runComputerTool(input: Record<string, unknown>): Promise<T
         return await scroll(input.coordinate as [number, number], dir, amt);
       }
       case "wait": {
-        const sec = (input.duration as number) ?? 1;
+        // Clamp Claude's defensive 2-3s waits — they accumulate fast and
+        // 1s is plenty for any UI to settle on a reasonably fast Mac.
+        const requested = (input.duration as number) ?? 1;
+        const sec = Math.min(requested, 1);
         await new Promise((r) => setTimeout(r, sec * 1000));
         return ok(`waited ${sec}s`);
       }
