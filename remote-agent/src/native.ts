@@ -58,3 +58,83 @@ end tell
 
   await exec("osascript", ["-e", script]);
 }
+
+/**
+ * Add a reminder to the default Reminders.app list.
+ *
+ * Uses the Reminders scripting dictionary (not UI scripting) so it just
+ * works without typing — the reminder pops into the visible list. The
+ * Reminders window is brought to the front so the audience can see it land.
+ */
+export async function addReminder(opts: {
+  title: string;
+  body?: string;
+}): Promise<void> {
+  const escapedTitle = opts.title.replace(/"/g, '\\"');
+  const escapedBody = (opts.body ?? "").replace(/"/g, '\\"');
+
+  const script = `
+tell application "Reminders"
+  activate
+  set newReminder to make new reminder with properties {name:"${escapedTitle}", body:"${escapedBody}"}
+end tell
+`;
+
+  await exec("osascript", ["-e", script]);
+}
+
+/**
+ * Drive Microsoft Outlook on macOS to compose and send an email.
+ *
+ * Visible-by-design: opens Outlook, Cmd+N for new message, types recipient,
+ * tabs through Subject and Body, then Cmd+Return to send. Audience watches
+ * the whole thing happen.
+ */
+export async function sendOutlookEmail(opts: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<void> {
+  const escapedTo = opts.to.replace(/"/g, '\\"');
+  const escapedSubject = opts.subject.replace(/"/g, '\\"');
+  const escapedBody = opts.body.replace(/"/g, '\\"');
+
+  const script = `
+tell application "Microsoft Outlook"
+  activate
+end tell
+
+delay 0.6
+
+tell application "System Events"
+  tell process "Microsoft Outlook"
+    -- New message window
+    keystroke "n" using {command down}
+    delay 0.8
+
+    -- Recipient
+    keystroke "${escapedTo}"
+    delay 0.4
+    key code 36 -- Return to confirm address
+    delay 0.3
+
+    -- Tab to Subject field
+    key code 48 -- Tab
+    delay 0.2
+    keystroke "${escapedSubject}"
+    delay 0.3
+
+    -- Tab into Body
+    key code 48 -- Tab
+    delay 0.2
+    keystroke "${escapedBody}"
+    delay 0.4
+
+    -- Send: Cmd+Return
+    keystroke return using {command down}
+  end tell
+end tell
+`;
+
+  await exec("osascript", ["-e", script]);
+}

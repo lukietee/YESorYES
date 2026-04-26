@@ -40,3 +40,4 @@ vision/captures/
 
 # personal / scratch
 PLAN.md
+.env*.local

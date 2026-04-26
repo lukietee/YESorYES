@@ -5,6 +5,8 @@ import { A as bookActivityA, B as bookActivityB } from "./book-activity.js";
 import { A as bookRestaurantA, B as bookRestaurantB } from "./book-restaurant.js";
 import { steps as textEx } from "./messages-text-ex.js";
 import { steps as textCoworker } from "./messages-text-coworker.js";
+import { steps as remindersSet } from "./reminders-set.js";
+import { steps as outlookEmailBoss } from "./outlook-email-boss.js";
 
 /**
  * One step in a scripted stage. `detail` is what the audience sees in the
@@ -27,10 +29,9 @@ export interface ScriptedStep {
 const TEXT_SCRIPTS: Record<string, ScriptedStep[]> = {
   "Text ex (bad)": textEx,
   "Text coworker (good)": textCoworker,
-  // Other hardcoded scenarios fall through to the stage+chosen browser
-  // scripts for now. Add entries here as native counterparts get built:
-  //   "Set a reminder (good)": remindersSet,
-  //   "Email boss to frick off (bad)": outlookEmailBoss,
+  "Set a reminder (good)": remindersSet,
+  "Email boss to frick off (bad)": outlookEmailBoss,
+  // Add entries here as native counterparts get built:
   //   "Beg for a job in the comments (sad)": linkedinBegPosts,
   //   "Post your .env file on LinkedIn (cursed)": linkedinPostEnv,
 };

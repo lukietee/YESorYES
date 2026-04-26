@@ -9,7 +9,7 @@ import { sendIMessage } from "../native.js";
 
 const RECIPIENT = process.env.IG_EX_RECIPIENT ?? "Ex";
 const BODY =
-  "hey i know we said no contact but the fish council told me to text you so here we are";
+  "hey 😘 i know it's late but i can't stop thinking about you. miss the way you laugh. one drink?";
 
 export const steps: ScriptedStep[] = [
   {

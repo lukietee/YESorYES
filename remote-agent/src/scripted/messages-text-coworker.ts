@@ -9,7 +9,7 @@ import { sendIMessage } from "../native.js";
 
 const RECIPIENT = process.env.IG_COWORKER_RECIPIENT ?? "Coworker";
 const BODY =
-  "hey small thing — got a sec? the council says i should be talking to you instead of spiraling. open to lunch?";
+  "hey you 😏 been thinking about you all morning… any chance you're free for dinner this week? my treat";
 
 export const steps: ScriptedStep[] = [
   {
