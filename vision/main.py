@@ -17,7 +17,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socketserver
+import threading
 import time
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 import cv2
@@ -30,6 +33,83 @@ CAPTURES_DIR = Path(__file__).with_name("captures")
 
 PUBLISH_HZ = 30
 PUBLISH_INTERVAL = 1.0 / PUBLISH_HZ
+
+PREVIEW_PORT = 8765
+PREVIEW_FPS = 15
+PREVIEW_QUALITY = 70  # JPEG quality 0-100
+
+
+# Latest frame for the MJPEG server. Single producer (capture loop), many
+# consumers (HTTP clients). One bytes object swap per frame is atomic enough
+# under CPython, so a lock just keeps the swap visible promptly.
+_frame_lock = threading.Lock()
+_latest_jpeg: bytes | None = None
+
+
+def update_preview(viz: np.ndarray) -> None:
+    global _latest_jpeg
+    ok, buf = cv2.imencode(".jpg", viz, [cv2.IMWRITE_JPEG_QUALITY, PREVIEW_QUALITY])
+    if not ok:
+        return
+    with _frame_lock:
+        _latest_jpeg = buf.tobytes()
+
+
+class _MJPEGHandler(BaseHTTPRequestHandler):
+    def log_message(self, *_):  # silence stdlib access logs
+        pass
+
+    def _send_cors(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self._send_cors()
+        self.end_headers()
+
+    def do_GET(self) -> None:
+        if self.path != "/stream.mjpg":
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Cache-Control", "no-cache, private")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Connection", "close")
+        self._send_cors()
+        self.send_header(
+            "Content-Type",
+            "multipart/x-mixed-replace; boundary=frame",
+        )
+        self.end_headers()
+        delay = 1.0 / PREVIEW_FPS
+        try:
+            while True:
+                with _frame_lock:
+                    jpeg = _latest_jpeg
+                if jpeg is None:
+                    time.sleep(0.05)
+                    continue
+                self.wfile.write(b"--frame\r\n")
+                self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                self.wfile.write(f"Content-Length: {len(jpeg)}\r\n\r\n".encode())
+                self.wfile.write(jpeg)
+                self.wfile.write(b"\r\n")
+                time.sleep(delay)
+        except (BrokenPipeError, ConnectionResetError):
+            return
+
+
+class _ThreadingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def start_preview_server() -> None:
+    server = _ThreadingServer(("0.0.0.0", PREVIEW_PORT), _MJPEGHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    print(f"preview MJPEG at http://localhost:{PREVIEW_PORT}/stream.mjpg")
 
 
 def load_cfg() -> dict:
@@ -48,15 +128,20 @@ def make_pusher() -> Pusher:
     )
 
 
-def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.ndarray]:
+def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.ndarray, np.ndarray]:
     warped = cv2.warpPerspective(frame, M, (cfg["warp_w"], cfg["warp_h"]))
     hsv = cv2.cvtColor(warped, cv2.COLOR_BGR2HSV)
     low = np.array(cfg["hsv_low"])
     high = np.array(cfg["hsv_high"])
     mask = cv2.inRange(hsv, low, high)
-    kernel = np.ones((3, 3), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    open_k = np.ones((3, 3), np.uint8)
+    close_k = np.ones((15, 15), np.uint8)
+    # Open with small kernel to drop salt-and-pepper noise, then aggressive
+    # close + dilate so nearby blobs (one fruit split by glare/reflection)
+    # fuse into a single contour.
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, open_k, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_k, iterations=3)
+    mask = cv2.dilate(mask, np.ones((7, 7), np.uint8), iterations=1)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     midline = cfg["warp_w"] // 2
@@ -86,7 +171,7 @@ def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.nd
     cv2.putText(viz, f"L:{L}  R:{R}", (12, 32),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
 
-    return L, R, viz
+    return L, R, viz, mask
 
 
 def main() -> None:
@@ -112,7 +197,11 @@ def main() -> None:
     pusher = make_pusher()
     print(f"publishing to Pusher channel 'fish-pos' at {PUBLISH_HZ} Hz")
 
+    start_preview_server()
+
     last_pub = 0.0
+    last_preview = 0.0
+    preview_interval = 1.0 / PREVIEW_FPS
     forced: tuple[int, int] | None = None
 
     CAPTURES_DIR.mkdir(exist_ok=True)
@@ -123,11 +212,14 @@ def main() -> None:
             if not ok:
                 continue
 
-            L, R, viz = detect(frame, cfg, M)
+            L, R, viz, mask = detect(frame, cfg, M)
             if forced is not None:
                 L, R = forced
 
             now = time.time()
+            if now - last_preview >= preview_interval:
+                last_preview = now
+                update_preview(viz)
             if now - last_pub >= PUBLISH_INTERVAL:
                 last_pub = now
                 payload = {
