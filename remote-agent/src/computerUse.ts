@@ -8,6 +8,11 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 const MODEL = "claude-sonnet-4-5";
 const COMPUTER_BETA = "computer-use-2025-01-24";
 const MAX_ITERATIONS = 30;
+const MAX_TOKENS = 1024;
+// How many of the most recent tool_result screenshots to keep in the message
+// history. Older screenshots get replaced with a text placeholder so we don't
+// re-upload + re-prefill ~1500 tokens of stale image data every iteration.
+const KEEP_RECENT_SCREENSHOTS = 2;
 
 interface AgentTask {
   taskId: string;
@@ -44,8 +49,14 @@ export async function runStage(task: AgentTask): Promise<void> {
 
     const resp = await anthropic.beta.messages.create({
       model: MODEL,
-      max_tokens: 4096,
-      system: stagePrompt,
+      max_tokens: MAX_TOKENS,
+      system: [
+        {
+          type: "text",
+          text: stagePrompt,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       tools: [
         {
           type: "computer_20250124",
@@ -93,9 +104,41 @@ export async function runStage(task: AgentTask): Promise<void> {
     }
 
     messages.push({ role: "user", content: results });
+    trimOldScreenshots(messages, KEEP_RECENT_SCREENSHOTS);
   }
 
   await postStatus({ ...statusBase(task), type: "error", detail: "max iterations exceeded" });
+}
+
+/**
+ * Walk the message history backward; the most recent `keep` tool_result blocks
+ * containing images stay intact, anything older has its image blocks swapped
+ * for a short text placeholder. Mutates messages in place.
+ */
+function trimOldScreenshots(
+  messages: Anthropic.Beta.Messages.BetaMessageParam[],
+  keep: number,
+): void {
+  let kept = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "user" || typeof msg.content === "string") continue;
+    for (const block of msg.content) {
+      if (block.type !== "tool_result") continue;
+      if (typeof block.content === "string" || !Array.isArray(block.content)) continue;
+      const hasImage = block.content.some((b) => b && (b as { type?: string }).type === "image");
+      if (!hasImage) continue;
+      if (kept < keep) {
+        kept++;
+        continue;
+      }
+      block.content = block.content.map((b) =>
+        b && (b as { type?: string }).type === "image"
+          ? { type: "text", text: "[earlier screenshot omitted to save tokens]" }
+          : b,
+      ) as typeof block.content;
+    }
+  }
 }
 
 function statusBase(task: AgentTask) {
