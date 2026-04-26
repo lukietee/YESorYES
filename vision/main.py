@@ -50,11 +50,11 @@ PRETEND_ROUND_SECONDS = 7.5
 # replace this with options pulled from the bridge over the `options`
 # channel (this script will simply stop publishing).
 PRETEND_OPTIONS: list[tuple[str, str]] = [
-    ("Pizza", "Sushi"),
-    ("Beach", "Mountains"),
-    ("Cats", "Dogs"),
-    ("Coffee", "Tea"),
-    ("Morning", "Night"),
+    ("Drunk-text your ex", "DM 12 randoms 'wyd'"),
+    ("Quit your job over Slack", "Fake your own death on LinkedIn"),
+    ("Move to Iceland alone", "Sell everything for one weekend in Vegas"),
+    ("Tell your boss what you really think", "Cry in the bathroom for 40 minutes"),
+    ("Get a regrettable tattoo tonight", "Email your therapist at 3am again"),
 ]
 PRETEND_STAGE = "ig-swipe"
 
