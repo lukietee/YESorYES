@@ -20,6 +20,7 @@ import os
 import socketserver
 import threading
 import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -33,6 +34,29 @@ CAPTURES_DIR = Path(__file__).with_name("captures")
 
 PUBLISH_HZ = 30
 PUBLISH_INTERVAL = 1.0 / PUBLISH_HZ
+
+# Sliding window for per-side count smoothing. We take the MAX L and MAX R
+# seen in this window so a fish briefly turning head-on (or hidden behind
+# the filter for a frame or two) doesn't drop the count. Capped at
+# total_fish so smoothing can never overcount.
+SMOOTH_WINDOW_FRAMES = 18  # ~0.6s at 30fps
+
+# Pretend-mode round pacing. The web display runs a 5s countdown after
+# receiving `options:present`, then ~1.5s reveal of the winner. Give it a
+# little extra so the next round's options arrive after the reveal.
+PRETEND_ROUND_SECONDS = 7.5
+
+# Pretend option pairs — rotated each round. The agent integration will
+# replace this with options pulled from the bridge over the `options`
+# channel (this script will simply stop publishing).
+PRETEND_OPTIONS: list[tuple[str, str]] = [
+    ("Pizza", "Sushi"),
+    ("Beach", "Mountains"),
+    ("Cats", "Dogs"),
+    ("Coffee", "Tea"),
+    ("Morning", "Night"),
+]
+PRETEND_STAGE = "ig-swipe"
 
 PREVIEW_PORT = 8765
 PREVIEW_FPS = 15
@@ -251,6 +275,12 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--camera", type=int, default=int(os.environ.get("CAMERA_INDEX", 0)))
     p.add_argument("--no-display", action="store_true")
+    p.add_argument(
+        "--pretend",
+        action="store_true",
+        help="Drive the display with rotating pretend options every "
+             f"{PRETEND_ROUND_SECONDS:g}s (bypasses the bridge).",
+    )
     args = p.parse_args()
 
     cfg = load_cfg()
@@ -276,6 +306,15 @@ def main() -> None:
     preview_interval = 1.0 / PREVIEW_FPS
     forced: tuple[int, int] | None = None
 
+    # Pretend-mode round state. Publishing the first options immediately
+    # would race with the page mounting; give the display a beat to subscribe.
+    next_round_at = time.time() + 1.5 if args.pretend else float("inf")
+    round_idx = 0
+
+    # Per-side count history for temporal smoothing.
+    history: deque[tuple[int, int]] = deque(maxlen=SMOOTH_WINDOW_FRAMES)
+    total_fish = cfg.get("total_fish", 3)
+
     CAPTURES_DIR.mkdir(exist_ok=True)
 
     try:
@@ -284,7 +323,26 @@ def main() -> None:
             if not ok:
                 continue
 
-            L, R, viz, mask = detect(frame, cfg, M)
+            raw_L, raw_R, viz, mask = detect(frame, cfg, M)
+            history.append((raw_L, raw_R))
+
+            # Take the per-side max across the smoothing window so a brief
+            # head-on / glare miss doesn't drop the count. Cap the sum at
+            # total_fish — if smoothing would push us over, trim from the
+            # side whose smoothed value is most inflated vs. this frame.
+            sm_L = max(h[0] for h in history)
+            sm_R = max(h[1] for h in history)
+            if sm_L + sm_R > total_fish:
+                excess = sm_L + sm_R - total_fish
+                # Inflation = how much smoothing added over the live frame.
+                inflate_L = sm_L - raw_L
+                inflate_R = sm_R - raw_R
+                if inflate_L >= inflate_R:
+                    sm_L = max(0, sm_L - excess)
+                else:
+                    sm_R = max(0, sm_R - excess)
+            L, R = sm_L, sm_R
+
             if forced is not None:
                 L, R = forced
 
@@ -303,6 +361,25 @@ def main() -> None:
                     pusher.trigger("fish-pos", "update", payload)
                 except Exception as e:  # network blip
                     print(f"pusher publish failed: {e}")
+
+            # Pretend mode: kick off a new round every PRETEND_ROUND_SECONDS.
+            # The web display owns the countdown + decision publish; vision
+            # only fires `options:present` so the UI cycles.
+            if args.pretend and now >= next_round_at:
+                opt_a, opt_b = PRETEND_OPTIONS[round_idx % len(PRETEND_OPTIONS)]
+                options_payload = {
+                    "callSid": f"pretend-{int(now)}",
+                    "stage": PRETEND_STAGE,
+                    "option_a": opt_a,
+                    "option_b": opt_b,
+                }
+                print(f"[round {round_idx}] options: A={opt_a!r}  B={opt_b!r}")
+                try:
+                    pusher.trigger("options", "present", options_payload)
+                except Exception as e:
+                    print(f"pusher options publish failed: {e}")
+                round_idx += 1
+                next_round_at = now + PRETEND_ROUND_SECONDS
 
             if not args.no_display:
                 cv2.imshow("vision", viz)

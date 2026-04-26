@@ -8,7 +8,11 @@ interface Props {
 }
 
 export function OptionCard({ side, label, text, state }: Props) {
-  const align = side === "left" ? "items-end pr-12" : "items-start pl-12";
+  // Center each card vertically and pin to the outer edge of its column,
+  // leaving the middle of the screen clear for the countdown overlay.
+  const align = side === "left"
+    ? "items-center justify-start pl-8"
+    : "items-center justify-end pr-8";
   const text_align = side === "left" ? "text-right" : "text-left";
 
   const ring =
@@ -23,7 +27,7 @@ export function OptionCard({ side, label, text, state }: Props) {
   return (
     <div className={`flex h-full ${align}`}>
       <div
-        className={`relative w-[44vw] h-[36vh] rounded-3xl border-2 bg-loss/40 backdrop-blur p-12 flex flex-col justify-between transition-all duration-300 ${ring}`}
+        className={`relative w-[38vw] h-[60vh] rounded-3xl border-2 bg-loss/40 backdrop-blur p-12 flex flex-col justify-between transition-all duration-300 ${ring}`}
       >
         <div className="text-7xl font-black text-slate-300/70">{label}</div>
         <div className={`text-5xl font-bold leading-tight ${text_align}`}>

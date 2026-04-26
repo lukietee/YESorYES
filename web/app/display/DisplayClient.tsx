@@ -170,8 +170,8 @@ export function DisplayClient() {
         <div className="h-full w-full grid grid-cols-2">
           <OptionCard side="left" label="A" text={options.option_a} state={aState} />
           <OptionCard side="right" label="B" text={options.option_b} state={bState} />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="flex flex-col items-center gap-8">
+          <div className="absolute inset-0 flex items-start justify-center pointer-events-none pt-12">
+            <div className="flex flex-col items-center gap-6">
               {view === "countdown" && (
                 <Countdown durationMs={COUNTDOWN_MS} onComplete={finalizeVote} />
               )}
@@ -192,10 +192,10 @@ export function DisplayClient() {
         </div>
       )}
 
-      <CameraPreview size="md" position="top-4 right-4" />
+      <CameraPreview size="md" position="bottom-4 right-4" />
 
       {/* tiny debug strip */}
-      <div className="absolute bottom-2 right-4 text-xs text-slate-700 font-mono">
+      <div className="absolute bottom-2 left-4 text-xs text-slate-700 font-mono">
         {view} · stage:{options?.stage ?? "—"} · L{latestPos?.counts.L ?? 0}:R{latestPos?.counts.R ?? 0}
       </div>
     </main>
