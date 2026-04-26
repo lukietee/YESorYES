@@ -108,7 +108,11 @@ export function registerTwilioStream(app: FastifyInstance) {
             customParameters?: Record<string, string>;
           };
           streamSid = start.streamSid;
-          callSid = start.customParameters?.callSid ?? start.callSid;
+          // Always trust Twilio's start.callSid — it's the real CA... id.
+          // We previously preferred customParameters.callSid which was a
+          // literal "{{CallSid}}" string (Twilio doesn't template params),
+          // causing all calls to collide on the same KV keys.
+          callSid = start.callSid;
 
           const conversation: Anthropic.MessageParam[] = [];
           putCall({
