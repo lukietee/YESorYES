@@ -112,7 +112,14 @@ export async function runTool(
   switch (name) {
     case "present_options": {
       const out = await postWeb("/api/options/present", { ...input, callSid });
-      return { stringified: JSON.stringify(out), raw: out };
+      const stage = (input as { stage?: string }).stage ?? "ig-swipe";
+      const directive =
+        `Options are now showing on the TV. ` +
+        `YOUR NEXT STEP IS REQUIRED: respond with a 2-4 word spoken line like "voting now" ` +
+        `and immediately call wait_for_decision(stage="${stage}"). ` +
+        `Do NOT end the turn. Do NOT repeat your previous line. Do NOT mention either option's text. ` +
+        `Do NOT predict who wins. Just speak briefly and call wait_for_decision next.`;
+      return { stringified: directive, raw: out };
     }
     case "wait_for_decision": {
       console.log(`[wait_for_decision] start callSid=${callSid} input=${JSON.stringify(input)}`);
@@ -152,7 +159,13 @@ export async function runTool(
     }
     case "dispatch_action": {
       const out = await postWeb("/api/agent/dispatch", { ...input, callSid });
-      return { stringified: JSON.stringify(out), raw: out };
+      const stage = (input as { stage?: string }).stage ?? "ig-swipe";
+      const directive =
+        `Agent dispatched. ` +
+        `YOUR NEXT STEP IS REQUIRED: respond with a 3-5 word spoken line like "watch this, muppet" ` +
+        `and immediately call wait_for_agent_status(stage="${stage}", until="done"). ` +
+        `Do NOT end the turn. Do NOT mention the option text again.`;
+      return { stringified: directive, raw: out };
     }
     case "wait_for_agent_status": {
       // Long-poll the wait endpoint, retry once on a 202 (no updates yet).
@@ -166,11 +179,27 @@ export async function runTool(
           | { pending: true }
           | { latest: string; history: string[]; done: boolean; error: boolean };
         if (!("pending" in out)) {
-          return { stringified: JSON.stringify(out), raw: out };
+          const summary = out.latest ?? "(no update)";
+          const isDone = out.done === true;
+          if (isDone) {
+            const directive =
+              `Agent finished. Latest status: "${summary}". ` +
+              `THIS IS THE FINAL STEP: respond with ONE snarky closing line (≤10 words) ` +
+              `referencing what just happened. Do NOT call any more tools. End the turn after speaking.`;
+            return { stringified: directive, raw: out };
+          }
+          // Not done yet — keep updating but don't loop forever.
+          const directive =
+            `Agent progress: "${summary}". ` +
+            `Speak ONE short snarky line (≤8 words) about this update, ` +
+            `then call wait_for_agent_status again with until="done" to keep watching.`;
+          return { stringified: directive, raw: out };
         }
       }
-      const fallback = { error: "no agent status updates yet" };
-      return { stringified: JSON.stringify(fallback), raw: fallback };
+      const fallback =
+        `Agent has gone quiet. ` +
+        `Speak ONE snarky closing line about the silence. Do NOT call any more tools.`;
+      return { stringified: fallback, raw: { error: "no agent status updates yet" } };
     }
     case "report_done": {
       // No-op on the server side; just lets Claude close out the stage.
