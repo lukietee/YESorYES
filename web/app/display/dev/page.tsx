@@ -6,6 +6,7 @@ import { FishTally } from "../components/FishTally";
 import { Countdown } from "../components/Countdown";
 import { ExecutingPanel } from "../components/ExecutingPanel";
 import { IntroIdle } from "../components/IntroIdle";
+import { CameraPreview } from "../components/CameraPreview";
 import type { AgentStatus, FishPos } from "@/lib/types";
 
 type View = "idle" | "countdown" | "decided-A" | "decided-B" | "executing";
@@ -140,6 +141,8 @@ export default function DisplayDevPage() {
         </div>
         <button onClick={reset} className={btn(false)}>reset</button>
       </div>
+
+      <CameraPreview size="md" position="bottom-4 right-4" />
     </main>
   );
 }
