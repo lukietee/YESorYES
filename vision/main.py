@@ -20,6 +20,7 @@ import os
 import socketserver
 import threading
 import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -33,6 +34,12 @@ CAPTURES_DIR = Path(__file__).with_name("captures")
 
 PUBLISH_HZ = 30
 PUBLISH_INTERVAL = 1.0 / PUBLISH_HZ
+
+# Sliding window for per-side count smoothing. We take the MAX L and MAX R
+# seen in this window so a fish briefly turning head-on (or hidden behind
+# the filter for a frame or two) doesn't drop the count. Capped at
+# total_fish so smoothing can never overcount.
+SMOOTH_WINDOW_FRAMES = 18  # ~0.6s at 30fps
 
 # Pretend-mode round pacing. The web display runs a 5s countdown after
 # receiving `options:present`, then ~1.5s reveal of the winner. Give it a
@@ -304,6 +311,10 @@ def main() -> None:
     next_round_at = time.time() + 1.5 if args.pretend else float("inf")
     round_idx = 0
 
+    # Per-side count history for temporal smoothing.
+    history: deque[tuple[int, int]] = deque(maxlen=SMOOTH_WINDOW_FRAMES)
+    total_fish = cfg.get("total_fish", 3)
+
     CAPTURES_DIR.mkdir(exist_ok=True)
 
     try:
@@ -312,7 +323,26 @@ def main() -> None:
             if not ok:
                 continue
 
-            L, R, viz, mask = detect(frame, cfg, M)
+            raw_L, raw_R, viz, mask = detect(frame, cfg, M)
+            history.append((raw_L, raw_R))
+
+            # Take the per-side max across the smoothing window so a brief
+            # head-on / glare miss doesn't drop the count. Cap the sum at
+            # total_fish — if smoothing would push us over, trim from the
+            # side whose smoothed value is most inflated vs. this frame.
+            sm_L = max(h[0] for h in history)
+            sm_R = max(h[1] for h in history)
+            if sm_L + sm_R > total_fish:
+                excess = sm_L + sm_R - total_fish
+                # Inflation = how much smoothing added over the live frame.
+                inflate_L = sm_L - raw_L
+                inflate_R = sm_R - raw_R
+                if inflate_L >= inflate_R:
+                    sm_L = max(0, sm_L - excess)
+                else:
+                    sm_R = max(0, sm_R - excess)
+            L, R = sm_L, sm_R
+
             if forced is not None:
                 L, R = forced
 
