@@ -4,6 +4,22 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 
 /**
+ * Reveal a file in Finder (opens its parent folder, file selected). Visible
+ * to the audience so they can see we really did pull it off disk.
+ */
+export async function revealInFinder(absolutePath: string): Promise<void> {
+  await exec("open", ["-R", absolutePath]);
+}
+
+/**
+ * Open a file in its default macOS app — for plain text files like .env this
+ * launches TextEdit so the contents render on screen, audience-visible.
+ */
+export async function openFile(absolutePath: string): Promise<void> {
+  await exec("open", [absolutePath]);
+}
+
+/**
  * Drive macOS Messages.app via AppleScript UI scripting.
  *
  * Visible-by-design: opens the app, presses Cmd+N for a new conversation,

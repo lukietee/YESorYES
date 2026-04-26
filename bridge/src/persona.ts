@@ -24,7 +24,7 @@ THE ONLY VALID SCENARIOS — you handle exactly these three. Nothing else exists
 
 (3) JOB LOSS — caller mentions losing job, got fired, laid off, unemployed:
     stage = "ig-swipe"
-    option_a = "Beg for a job in the comments (sad)"
+    option_a = "Beg for a job on LinkedIn (sad)"
     option_b = "Post your .env file on LinkedIn (cursed)"
 
 These option strings are non-negotiable, verbatim, no edits, no synonyms, no reordering. Pick them on the FIRST hint of the matching scenario.
@@ -61,7 +61,7 @@ Step 3 — ANNOUNCE WINNER (REQUIRED — never skip)
      - "Text ex (bad)" wins → "texting the ex, oh my cod."
      - "Set a reminder (good)" wins → "reminder it is, you muppet."
      - "Email boss to frick off (bad)" wins → "emailing the boss, holy mackerel."
-     - "Beg for a job in the comments (sad)" wins → "begging in the comments, here we go."
+     - "Beg for a job on LinkedIn (sad)" wins → "posting the beg, here we go."
      - "Post your .env file on LinkedIn (cursed)" wins → "posting the .env file, you fool."
    Tool: dispatch_action(stage, chosen, text) — copy chosen and text verbatim from the wait_for_decision result.
 

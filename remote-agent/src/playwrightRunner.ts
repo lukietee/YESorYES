@@ -1,27 +1,38 @@
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, type BrowserContext, type Page } from "playwright";
+import { resolve } from "node:path";
 
-let browser: Browser | null = null;
 let context: BrowserContext | null = null;
 
 /**
- * Launch (or reuse) a single headed Chromium instance and hand back a fresh
- * page. Headed because the laptop's screen IS the demo — the audience watches
- * Chrome navigate and type.
+ * Launch (or reuse) a single headed persistent Chromium profile and hand back
+ * a fresh page. Headed because the laptop's screen IS the demo — the audience
+ * watches Chrome navigate and type.
+ *
+ * Uses a persistent user-data-dir so cookies/sessions survive restarts. Log
+ * into LinkedIn, X, Instagram, etc. ONCE in this profile (override the path
+ * with PW_PROFILE_DIR) and the agent stays logged in across calls.
  */
 export async function getPage(): Promise<Page> {
-  if (!browser) {
-    browser = await chromium.launch({
+  if (!context) {
+    const userDataDir = process.env.PW_PROFILE_DIR
+      ? resolve(process.env.PW_PROFILE_DIR)
+      : resolve(process.cwd(), ".pw-profile");
+
+    context = await chromium.launchPersistentContext(userDataDir, {
       headless: false,
-      args: ["--start-maximized", "--disable-blink-features=AutomationControlled"],
+      channel: "chrome",
+      viewport: null,
+      args: [
+        "--start-maximized",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-features=IsolateOrigins,site-per-process",
+      ],
     });
   }
-  if (!context) {
-    context = await browser.newContext({
-      viewport: null,
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-    });
+  // Reuse the first tab if it's the only blank one, otherwise open a new tab.
+  const pages = context.pages();
+  if (pages.length === 1 && pages[0].url() === "about:blank") {
+    return pages[0];
   }
   return await context.newPage();
 }
@@ -29,6 +40,4 @@ export async function getPage(): Promise<Page> {
 export async function closeBrowser(): Promise<void> {
   await context?.close().catch(() => {});
   context = null;
-  await browser?.close().catch(() => {});
-  browser = null;
 }

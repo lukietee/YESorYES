@@ -1,5 +1,4 @@
 import type { Page } from "playwright";
-import { A as igSwipeA, B as igSwipeB } from "./ig-swipe.js";
 import { A as bookFlightA, B as bookFlightB } from "./book-flight.js";
 import { A as bookActivityA, B as bookActivityB } from "./book-activity.js";
 import { A as bookRestaurantA, B as bookRestaurantB } from "./book-restaurant.js";
@@ -7,6 +6,8 @@ import { steps as textEx } from "./messages-text-ex.js";
 import { steps as textCoworker } from "./messages-text-coworker.js";
 import { steps as remindersSet } from "./reminders-set.js";
 import { steps as outlookEmailBoss } from "./outlook-email-boss.js";
+import { steps as linkedinPostEnv } from "./linkedin-post-env.js";
+import { steps as linkedinBegComment } from "./linkedin-beg-comment.js";
 
 /**
  * One step in a scripted stage. `detail` is what the audience sees in the
@@ -31,13 +32,17 @@ const TEXT_SCRIPTS: Record<string, ScriptedStep[]> = {
   "Text coworker (good)": textCoworker,
   "Set a reminder (good)": remindersSet,
   "Email boss to frick off (bad)": outlookEmailBoss,
-  // Add entries here as native counterparts get built:
-  //   "Beg for a job in the comments (sad)": linkedinBegPosts,
-  //   "Post your .env file on LinkedIn (cursed)": linkedinPostEnv,
+  "Post your .env file on LinkedIn (cursed)": linkedinPostEnv,
+  "Beg for a job on LinkedIn (sad)": linkedinBegComment,
+  // Legacy label kept so an older bridge build can't fall through to a
+  // stage-script and accidentally open something completely unrelated.
+  "Beg for a job in the comments (sad)": linkedinBegComment,
 };
 
+// All `ig-swipe` scenarios route through TEXT_SCRIPTS by `text` — there is
+// intentionally no A/B fallback for that stage so an unrecognized text can
+// never silently open the wrong site (was previously opening x.com).
 const STAGE_SCRIPTS: Record<string, { A: ScriptedStep[]; B: ScriptedStep[] }> = {
-  "ig-swipe": { A: igSwipeA, B: igSwipeB },
   "book-flight": { A: bookFlightA, B: bookFlightB },
   "book-activity": { A: bookActivityA, B: bookActivityB },
   "book-restaurant": { A: bookRestaurantA, B: bookRestaurantB },
