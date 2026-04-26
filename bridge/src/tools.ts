@@ -97,6 +97,10 @@ async function postWeb(path: string, body: unknown): Promise<unknown> {
     },
     body: JSON.stringify(body),
   });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`web ${res.status} ${path}: ${text.slice(0, 200)}`);
+  }
   return res.json();
 }
 

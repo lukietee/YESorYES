@@ -23,6 +23,13 @@ export async function runStage(task: AgentTask): Promise<void> {
   const deadline = startedAt + task.timeoutSec * 1000;
   const stagePrompt = STAGE_PROMPTS[task.stage];
 
+  // Stages without a real Computer Use prompt (e.g. "intro") short-circuit:
+  // post done immediately so the bridge can advance instead of hanging.
+  if (!stagePrompt || stagePrompt === "no-op") {
+    await postStatus({ ...statusBase(task), type: "done", detail: `${task.stage} acknowledged` });
+    return;
+  }
+
   const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [
     { role: "user", content: task.instruction },
   ];

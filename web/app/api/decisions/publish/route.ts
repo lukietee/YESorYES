@@ -13,19 +13,30 @@ const Body = z.object({
 });
 
 // Called from the display browser after countdown ends.
-// Auth: same INTERNAL_TOKEN bearer (display reads it from a server-rendered
-// hidden field or client env). For demo simplicity, we accept either bearer
-// auth or a same-origin request.
+// Auth: bearer token (server-side callers like the bridge) OR same-origin
+// (display browser). We don't ship INTERNAL_TOKEN to the client, so the
+// display has to rely on origin/referer matching.
 export async function POST(req: Request) {
   const expected = process.env.INTERNAL_TOKEN;
   const got = req.headers.get("authorization");
-  const sameOrigin = req.headers.get("origin")
-    ? req.headers.get("origin") === new URL(req.url).origin
-    : false;
+  if (expected && got === `Bearer ${expected}`) {
+    return handle(req);
+  }
 
-  if (got !== `Bearer ${expected}` && !sameOrigin) {
+  const reqOrigin = new URL(req.url).origin;
+  const origin = req.headers.get("origin");
+  const referer = req.headers.get("referer");
+  // Some browsers omit `Origin` on same-origin POSTs; fall back to Referer.
+  const sameOrigin =
+    (origin && origin === reqOrigin) ||
+    (!!referer && new URL(referer).origin === reqOrigin);
+  if (!sameOrigin) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  return handle(req);
+}
+
+async function handle(req: Request) {
 
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) {
