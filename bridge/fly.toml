@@ -1,4 +1,4 @@
-app = "guppy-council-bridge"
+app = "yes-or-yes-bridge"
 primary_region = "iad"
 
 [build]
