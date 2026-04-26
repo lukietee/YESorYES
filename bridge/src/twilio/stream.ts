@@ -37,6 +37,17 @@ export function registerTwilioStream(app: FastifyInstance) {
       return tts;
     };
 
+    // Closes the current TTS WS (sending EOS) and clears the reference.
+    // Used between sub-turns of a brain turn so the next text deltas open
+    // a fresh ElevenLabs session — re-using the session after EOS would
+    // silently drop audio because stream-input WSes close on EOS.
+    const endTtsSession = () => {
+      if (!tts) return;
+      tts.flush();
+      tts.close();
+      tts = null;
+    };
+
     const handleFinalUtterance = async (text: string) => {
       const state = getCall(callSid);
       if (!state) return;
@@ -51,14 +62,20 @@ export function registerTwilioStream(app: FastifyInstance) {
 
       state.conversation.push({ role: "user", content: t });
 
-      const ttsSession = newTtsSession();
+      // Sub-turn boundary: we DON'T pre-allocate a TTS session. Instead,
+      // each text delta lazily opens one if needed, and onSubTurnEnd
+      // closes it so the next sub-turn opens fresh.
+      newTtsSession(); // greeting / first sub-turn always has audio ready
       app.log.info("[brain] turn start");
       try {
         await runBrainTurn(callSid, state.conversation, {
-          onTextDelta: (delta) => ttsSession.push(delta),
+          onTextDelta: (delta) => {
+            if (!tts) newTtsSession();
+            tts!.push(delta);
+          },
           onToolStart: (name) => app.log.info({ name }, "[brain] tool_use"),
-          onSubTurnEnd: () => ttsSession.flush(),
-          onEnd: () => ttsSession.flush(),
+          onSubTurnEnd: () => endTtsSession(),
+          onEnd: () => endTtsSession(),
         });
         app.log.info("[brain] turn end ok");
       } catch (e) {
