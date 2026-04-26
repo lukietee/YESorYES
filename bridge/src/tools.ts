@@ -115,6 +115,7 @@ export async function runTool(
       return { stringified: JSON.stringify(out), raw: out };
     }
     case "wait_for_decision": {
+      console.log(`[wait_for_decision] start callSid=${callSid} input=${JSON.stringify(input)}`);
       // Tighter inner long-poll (3s windows) so any failure surfaces fast
       // instead of looking like a 10s freeze on the call. Total wait is
       // capped to 30s overall (still plenty for a deliberation).
@@ -128,6 +129,7 @@ export async function runTool(
           | { pending: true }
           | { stage: string; chosen: "A" | "B"; text: string; vote: { L: number; R: number } };
         if (!("pending" in out)) {
+          console.log(`[wait_for_decision] resolved chosen=${out.chosen} text="${out.text}" elapsed=${Date.now() - start}ms`);
           // Format the result so Claude can't misread it. The verbose
           // string forces it to use the actual winning text rather than
           // guessing which option won.
@@ -138,9 +140,11 @@ export async function runTool(
             `Then call dispatch_action with chosen="${out.chosen}" and text="${out.text}". ` +
             `Do not say the other option won. Do not invent a different winner. ` +
             `(stage=${out.stage}, vote L:${out.vote.L} R:${out.vote.R})`;
+          console.log(`[wait_for_decision] result string returned to claude:\n${human}`);
           return { stringified: human, raw: out };
         }
       }
+      console.log(`[wait_for_decision] TIMED OUT after ${Date.now() - start}ms`);
       const fallback =
         "ERROR: decision timeout — no vote arrived. Tell the caller " +
         "the council was distracted and ask them to repeat. Do NOT call dispatch_action.";
