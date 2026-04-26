@@ -1,6 +1,6 @@
 # 00 — Overview
 
-The Guppy Council. Three guppies. One TV. Two MacBooks. Limitless poor decisions.
+YES or YES. Three guppies. One TV. Two MacBooks. Limitless poor decisions.
 
 ## What it is
 
