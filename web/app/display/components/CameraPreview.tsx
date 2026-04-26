@@ -1,67 +1,135 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const STREAM_URL =
-  process.env.NEXT_PUBLIC_VISION_PREVIEW_URL ??
-  "http://localhost:8765/stream.mjpg";
+const PREVIEW_BASE =
+  process.env.NEXT_PUBLIC_VISION_PREVIEW_URL ?? "http://localhost:8765";
+
+const POLL_HZ = 10; // single-image poll rate
 
 interface Props {
-  /** Tailwind size class on the panel */
   size?: "sm" | "md" | "lg";
-  /** Tailwind position classes (defaults to top-right) */
   position?: string;
 }
 
+type State = "loading" | "live" | "offline";
+
 export function CameraPreview({ size = "md", position = "top-4 right-4" }: Props) {
-  const [available, setAvailable] = useState<boolean | null>(null);
+  const [state, setState] = useState<State>("loading");
+  const [src, setSrc] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const failures = useRef(0);
 
   useEffect(() => {
-    // Cheap availability probe — try a HEAD-ish fetch with no-cors.
-    // If the local vision server isn't running, the image errors out and
-    // we hide the panel.
     let cancelled = false;
-    const url = STREAM_URL.replace("/stream.mjpg", "/stream.mjpg");
-    const img = new Image();
-    img.onload = () => {
-      if (!cancelled) setAvailable(true);
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(
+          `${PREVIEW_BASE}/frame.jpg?t=${Date.now()}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const blob = await res.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        setSrc((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+        setState("live");
+        failures.current = 0;
+      } catch {
+        failures.current += 1;
+        if (failures.current >= 3) setState("offline");
+      }
     };
-    img.onerror = () => {
-      if (!cancelled) setAvailable(false);
-    };
-    // Add a cache buster so retries work
-    img.src = `${url}?t=${Date.now()}`;
+
+    const interval = window.setInterval(tick, 1000 / POLL_HZ);
+    tick();
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      setSrc((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
     };
   }, []);
 
-  const dim =
-    size === "sm" ? "w-64" : size === "lg" ? "w-[480px]" : "w-80";
+  // Escape closes the expanded view
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
 
-  if (available === false) {
+  const dim = size === "sm" ? "w-64" : size === "lg" ? "w-[480px]" : "w-80";
+
+  // ── Expanded modal overlay ─────────────────────────────────────────────
+  if (expanded) {
     return (
       <div
-        className={`absolute ${position} ${dim} rounded-lg border border-slate-800 bg-loss/60 p-2 text-xs font-mono text-slate-500`}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm cursor-zoom-out"
+        onClick={() => setExpanded(false)}
       >
-        camera offline · run vision/main.py
+        {src && state === "live" && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            alt="vision feed"
+            className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
+          />
+        )}
+        {state !== "live" && (
+          <div className="text-slate-400 font-mono">camera offline</div>
+        )}
+        <div className="absolute top-6 left-6 text-xs font-mono uppercase tracking-widest text-slate-400/80">
+          ● live · click anywhere or press ESC to close
+        </div>
       </div>
     );
   }
 
+  // ── Corner panel ────────────────────────────────────────────────────────
   return (
-    <div
-      className={`absolute ${position} ${dim} aspect-video rounded-lg border border-slate-700 bg-black/60 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.4)]`}
+    <button
+      type="button"
+      onClick={() => setExpanded(true)}
+      className={`absolute ${position} ${dim} aspect-video rounded-lg border bg-black/60 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.4)] cursor-zoom-in transition-all hover:scale-[1.02] hover:border-glow ${
+        state === "live" ? "border-slate-700" : "border-slate-800"
+      }`}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={STREAM_URL}
-        alt="vision feed"
-        className="w-full h-full object-cover"
-      />
-      <div className="absolute top-1.5 left-2 text-[10px] font-mono uppercase tracking-widest text-slate-400/80">
-        ● live
-      </div>
-    </div>
+      {src && state === "live" && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt="vision feed"
+          className="w-full h-full object-cover"
+        />
+      )}
+
+      {state === "live" && (
+        <div className="absolute top-1.5 left-2 text-[10px] font-mono uppercase tracking-widest text-slate-400/80">
+          ● live
+        </div>
+      )}
+
+      {state === "loading" && (
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-mono text-slate-600">
+          connecting…
+        </div>
+      )}
+
+      {state === "offline" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-xs font-mono text-slate-500">
+          <div>camera offline</div>
+          <div className="text-slate-700">retrying…</div>
+        </div>
+      )}
+    </button>
   );
 }

@@ -55,7 +55,7 @@ def update_preview(viz: np.ndarray) -> None:
         _latest_jpeg = buf.tobytes()
 
 
-class _MJPEGHandler(BaseHTTPRequestHandler):
+class _PreviewHandler(BaseHTTPRequestHandler):
     def log_message(self, *_):  # silence stdlib access logs
         pass
 
@@ -69,9 +69,34 @@ class _MJPEGHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        if self.path != "/stream.mjpg":
+        # /frame.jpg → latest single JPEG (browser polls this on a timer)
+        # /stream.mjpg → multipart stream (kept for non-browser tools / fallback)
+        if self.path.startswith("/frame.jpg"):
+            self._serve_single_jpeg()
+        elif self.path.startswith("/stream.mjpg"):
+            self._serve_mjpeg()
+        else:
             self.send_error(404)
+
+    def _serve_single_jpeg(self) -> None:
+        with _frame_lock:
+            jpeg = _latest_jpeg
+        if jpeg is None:
+            self.send_error(503, "no frame yet")
             return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(jpeg)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self._send_cors()
+        self.end_headers()
+        try:
+            self.wfile.write(jpeg)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _serve_mjpeg(self) -> None:
         self.send_response(200)
         self.send_header("Cache-Control", "no-cache, private")
         self.send_header("Pragma", "no-cache")
@@ -106,10 +131,11 @@ class _ThreadingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 
 def start_preview_server() -> None:
-    server = _ThreadingServer(("0.0.0.0", PREVIEW_PORT), _MJPEGHandler)
+    server = _ThreadingServer(("0.0.0.0", PREVIEW_PORT), _PreviewHandler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    print(f"preview MJPEG at http://localhost:{PREVIEW_PORT}/stream.mjpg")
+    print(f"preview at http://localhost:{PREVIEW_PORT}/frame.jpg (poll) "
+          f"and /stream.mjpg (multipart)")
 
 
 def load_cfg() -> dict:
@@ -149,24 +175,70 @@ def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.nd
     viz = warped.copy()
     cv2.line(viz, (midline, 0), (midline, cfg["warp_h"]), (255, 255, 255), 1)
 
+    max_aspect = cfg.get("max_aspect", 3.0)
+    total_fish = cfg.get("total_fish", 3)
+    # x-tolerance for matching a blob to its vertical mirror. ~8% of width.
+    mirror_dx_tol = cfg.get("mirror_dx_tol", int(cfg["warp_w"] * 0.08))
+    # Two blobs whose centroids sit within this radius are treated as the
+    # same fish (glare/reflection split), regardless of vertical position.
+    dedupe_radius = cfg.get("dedupe_radius", int(cfg["warp_w"] * 0.05))
+
+    candidates: list[dict] = []
     for c in contours:
         area = cv2.contourArea(c)
         if not (cfg["min_area"] <= area <= cfg["max_area"]):
+            continue
+        x, y, w, h = cv2.boundingRect(c)
+        if w == 0 or h == 0:
+            continue
+        aspect = max(w / h, h / w)
+        if aspect > max_aspect:
             continue
         m = cv2.moments(c)
         if m["m00"] == 0:
             continue
         cx = int(m["m10"] / m["m00"])
         cy = int(m["m01"] / m["m00"])
-        if cx < midline:
+        candidates.append({"x": x, "y": y, "w": w, "h": h,
+                           "cx": cx, "cy": cy, "area": area})
+
+    # Rank blobs by "fish-likeness" (bigger and higher = more likely real)
+    # and greedily accept up to total_fish, skipping any blob too close to
+    # one already kept (mirror reflection or glare split).
+    candidates.sort(key=lambda b: b["area"] - b["cy"] * 0.5, reverse=True)
+    kept: list[dict] = []
+    for b in candidates:
+        if len(kept) >= total_fish:
+            break
+        too_close = False
+        for k in kept:
+            dx = abs(b["cx"] - k["cx"])
+            dy = abs(b["cy"] - k["cy"])
+            # Vertical mirror: same x, any y difference.
+            if dx < mirror_dx_tol and b["cy"] > k["cy"]:
+                too_close = True
+                break
+            # General duplicate: blobs sitting on top of each other.
+            if dx * dx + dy * dy < dedupe_radius * dedupe_radius:
+                too_close = True
+                break
+        if too_close:
+            continue
+        kept.append(b)
+
+    # Belt-and-suspenders: never emit more than total_fish, no matter what.
+    kept = kept[:total_fish]
+
+    for b in kept:
+        if b["cx"] < midline:
             L += 1
             color = (0, 200, 255)
         else:
             R += 1
             color = (255, 200, 0)
-        x, y, w, h = cv2.boundingRect(c)
-        cv2.rectangle(viz, (x, y), (x + w, y + h), color, 2)
-        cv2.circle(viz, (cx, cy), 3, color, -1)
+        cv2.rectangle(viz, (b["x"], b["y"]),
+                      (b["x"] + b["w"], b["y"] + b["h"]), color, 2)
+        cv2.circle(viz, (b["cx"], b["cy"]), 3, color, -1)
 
     cv2.putText(viz, f"L:{L}  R:{R}", (12, 32),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
