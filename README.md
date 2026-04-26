@@ -1,4 +1,4 @@
-# YES or YES
+# YES? or YES!
 
 Three guppies. One TV. Two MacBooks. A phone number. Decisions get made — yes or yes.
 
