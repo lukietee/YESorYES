@@ -32,7 +32,7 @@ from pusher import Pusher
 ROI_PATH = Path(__file__).with_name("roi.json")
 CAPTURES_DIR = Path(__file__).with_name("captures")
 
-PUBLISH_HZ = 30
+PUBLISH_HZ = 5
 PUBLISH_INTERVAL = 1.0 / PUBLISH_HZ
 
 # Sliding window for per-side count smoothing. We take the MAX L and MAX R
