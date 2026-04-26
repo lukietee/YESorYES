@@ -28,6 +28,7 @@ export async function POST(req: Request) {
     callSid,
     stage,
     chosen,
+    text,
     instruction: template.instruction(text),
     timeoutSec: template.timeoutSec,
   };

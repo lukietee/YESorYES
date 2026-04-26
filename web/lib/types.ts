@@ -37,6 +37,10 @@ export interface AgentTask {
   callSid: string;
   stage: Stage;
   chosen: Choice;
+  /** Raw option text (e.g. "Text ex (bad)"). Used by the remote-agent to
+   *  route to the right scripted handler when multiple hardcoded scenarios
+   *  share a stage. */
+  text: string;
   instruction: string;
   timeoutSec: number;
 }

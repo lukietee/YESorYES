@@ -8,6 +8,9 @@ interface AgentTask {
   callSid: string;
   stage: Stage;
   chosen: "A" | "B";
+  /** Raw option text — used to route to native scripts (Messages, Reminders,
+   *  etc.) when multiple scenarios share a stage. */
+  text?: string;
   instruction: string;
   timeoutSec: number;
 }
@@ -18,8 +21,8 @@ interface AgentTask {
  * steps that drives a headed Chrome window on the laptop.
  */
 export async function runScripted(task: AgentTask): Promise<void> {
-  console.log("[scripted] runScripted entry", task.stage, task.chosen);
-  const script = getScript(task.stage, task.chosen);
+  console.log("[scripted] runScripted entry", task.stage, task.chosen, "text=", task.text);
+  const script = getScript(task.stage, task.chosen, task.text);
   if (!script) {
     console.log("[scripted] no script");
     await postStatus({

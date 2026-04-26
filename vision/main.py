@@ -34,6 +34,9 @@ CAPTURES_DIR = Path(__file__).with_name("captures")
 
 PUBLISH_HZ = 5
 PUBLISH_INTERVAL = 1.0 / PUBLISH_HZ
+# Slow liveness ping when fish counts are stable. Without this the display
+# could think vision died if no fish moved. 5s is gentle on Pusher quota.
+HEARTBEAT_SEC = 5.0
 
 # Sliding window for per-side count smoothing. We take the MAX L and MAX R
 # seen in this window so a fish briefly turning head-on (or hidden behind
@@ -354,6 +357,8 @@ def main() -> None:
     start_preview_server()
 
     last_pub = 0.0
+    last_heartbeat = 0.0
+    last_published_counts: tuple[int, int] = (-1, -1)
     last_preview = 0.0
     preview_interval = 1.0 / PREVIEW_FPS
     forced: tuple[int, int] | None = None
@@ -420,16 +425,26 @@ def main() -> None:
                 last_preview = now
                 update_preview(viz)
             if now - last_pub >= PUBLISH_INTERVAL:
-                last_pub = now
-                payload = {
-                    "counts": {"L": L, "R": R},
-                    "total": L + R,
-                    "ts": time.time_ns(),
-                }
-                try:
-                    pusher.trigger("fish-pos", "update", payload)
-                except Exception as e:  # network blip
-                    print(f"pusher publish failed: {e}")
+                # Only publish when counts actually change OR every HEARTBEAT_SEC
+                # as a liveness ping. Prior version published at 5 Hz unconditionally,
+                # which burned ~430k Pusher messages per day even when fish were
+                # sitting still.
+                changed = (L, R) != last_published_counts
+                heartbeat_due = now - last_heartbeat >= HEARTBEAT_SEC
+                if changed or heartbeat_due:
+                    last_pub = now
+                    if heartbeat_due:
+                        last_heartbeat = now
+                    last_published_counts = (L, R)
+                    payload = {
+                        "counts": {"L": L, "R": R},
+                        "total": L + R,
+                        "ts": time.time_ns(),
+                    }
+                    try:
+                        pusher.trigger("fish-pos", "update", payload)
+                    except Exception as e:  # network blip
+                        print(f"pusher publish failed: {e}")
 
             # Pretend mode: kick off a new round every PRETEND_ROUND_SECONDS.
             # The web display owns the countdown + decision publish; vision
