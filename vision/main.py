@@ -183,14 +183,16 @@ def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.nd
     hsv = cv2.cvtColor(warped, cv2.COLOR_BGR2HSV)
     low = np.array(cfg["hsv_low"])
     high = np.array(cfg["hsv_high"])
-    mask = cv2.inRange(hsv, low, high)
+    raw = cv2.inRange(hsv, low, high)
     open_k = np.ones((3, 3), np.uint8)
     close_k = np.ones((15, 15), np.uint8)
-    # Open with small kernel to drop salt-and-pepper noise, then aggressive
-    # close + dilate so nearby blobs (one fruit split by glare/reflection)
-    # fuse into a single contour.
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, open_k, iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_k, iterations=3)
+    # Two parallel masks. `mask_tight` only opens (drops salt+pepper noise)
+    # so the natural gap between two adjacent fish stays visible. `mask`
+    # additionally closes + dilates so a single fish split by glare/reflection
+    # fuses back into one contour. We find blobs in `mask`, then re-examine
+    # `mask_tight` inside each blob to detect "this is actually 2 fish".
+    mask_tight = cv2.morphologyEx(raw, cv2.MORPH_OPEN, open_k, iterations=1)
+    mask = cv2.morphologyEx(mask_tight, cv2.MORPH_CLOSE, close_k, iterations=3)
     mask = cv2.dilate(mask, np.ones((7, 7), np.uint8), iterations=1)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -206,6 +208,14 @@ def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.nd
     # Two blobs whose centroids sit within this radius are treated as the
     # same fish (glare/reflection split), regardless of vertical position.
     dedupe_radius = cfg.get("dedupe_radius", int(cfg["warp_w"] * 0.05))
+    # Blobs above this area get re-examined in mask_tight to see if they're
+    # actually two fish that morphology fused. Below it, we trust the merge.
+    split_area_threshold = cfg.get("split_area_threshold", 1500)
+    # A sub-component must be at least this big to count as a separate fish
+    # (avoids over-splitting on head/tail of a single fish).
+    min_subblob_area = cfg.get("min_subblob_area", max(cfg["min_area"] // 2, 100))
+    # Two sub-blob centroids closer than this are still one fish (head+tail).
+    min_subblob_separation = cfg.get("min_subblob_separation", int(cfg["warp_w"] * 0.04))
 
     candidates: list[dict] = []
     for c in contours:
@@ -218,6 +228,43 @@ def detect(frame: np.ndarray, cfg: dict, M: np.ndarray) -> tuple[int, int, np.nd
         aspect = max(w / h, h / w)
         if aspect > max_aspect:
             continue
+
+        # For large blobs, try to split: look at the tight (no-close) mask
+        # inside this bbox; if there are multiple sufficiently-separated
+        # sub-components, treat the parent as multiple fish.
+        sub_split_emitted = False
+        if area > split_area_threshold:
+            sub = mask_tight[y:y + h, x:x + w]
+            n_cc, _, stats, sub_centroids = cv2.connectedComponentsWithStats(sub)
+            sub_blobs = []
+            for i in range(1, n_cc):  # skip background label 0
+                sub_area = int(stats[i, cv2.CC_STAT_AREA])
+                if sub_area < min_subblob_area:
+                    continue
+                scx = int(x + sub_centroids[i][0])
+                scy = int(y + sub_centroids[i][1])
+                sub_blobs.append({"cx": scx, "cy": scy, "area": sub_area})
+            # Drop sub-blobs that are too close to a stronger one (head/tail).
+            sub_blobs.sort(key=lambda b: b["area"], reverse=True)
+            kept_subs: list[dict] = []
+            for sb in sub_blobs:
+                if all(
+                    (sb["cx"] - ks["cx"]) ** 2 + (sb["cy"] - ks["cy"]) ** 2
+                    >= min_subblob_separation ** 2
+                    for ks in kept_subs
+                ):
+                    kept_subs.append(sb)
+            if len(kept_subs) > 1:
+                for sb in kept_subs:
+                    candidates.append({
+                        "x": x, "y": y, "w": w, "h": h,
+                        "cx": sb["cx"], "cy": sb["cy"], "area": sb["area"],
+                    })
+                sub_split_emitted = True
+
+        if sub_split_emitted:
+            continue
+
         m = cv2.moments(c)
         if m["m00"] == 0:
             continue
@@ -291,10 +338,15 @@ def main() -> None:
     )
     M = cv2.getPerspectiveTransform(corners, dst)
 
-    cap = cv2.VideoCapture(args.camera)
+    def open_camera() -> cv2.VideoCapture:
+        c = cv2.VideoCapture(args.camera)
+        if c.isOpened():
+            c.set(cv2.CAP_PROP_FPS, 30)
+        return c
+
+    cap = open_camera()
     if not cap.isOpened():
         raise SystemExit(f"could not open camera {args.camera}")
-    cap.set(cv2.CAP_PROP_FPS, 30)
 
     pusher = make_pusher()
     print(f"publishing to Pusher channel 'fish-pos' at {PUBLISH_HZ} Hz")
@@ -315,13 +367,30 @@ def main() -> None:
     history: deque[tuple[int, int]] = deque(maxlen=SMOOTH_WINDOW_FRAMES)
     total_fish = cfg.get("total_fish", 3)
 
+    # Camera self-heal: if reads fail for ~1s straight, reopen the device.
+    # Lets the script survive an Osmo unplug/replug without a manual restart.
+    consecutive_failures = 0
+    failure_threshold = 30
+
     CAPTURES_DIR.mkdir(exist_ok=True)
 
     try:
         while True:
             ok, frame = cap.read()
             if not ok:
+                consecutive_failures += 1
+                if consecutive_failures >= failure_threshold:
+                    print(f"[camera] {consecutive_failures} read failures, "
+                          "reopening device")
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
+                    time.sleep(0.5)
+                    cap = open_camera()
+                    consecutive_failures = 0
                 continue
+            consecutive_failures = 0
 
             raw_L, raw_R, viz, mask = detect(frame, cfg, M)
             history.append((raw_L, raw_R))

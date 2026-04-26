@@ -37,3 +37,6 @@ vision/captures/
 # editor
 .vscode/
 .idea/
+
+# personal / scratch
+PLAN.md
