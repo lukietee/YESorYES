@@ -6,7 +6,7 @@ export function IntroIdle() {
       <div className="text-9xl">🐟🐟🐟</div>
       <div className="text-6xl font-black tracking-tight">YES or YES</div>
       <div className="text-2xl text-slate-500 uppercase tracking-[0.4em] animate-pulse-slow">
-        awaiting caller
+        the council awaits your worst decision
       </div>
     </div>
   );

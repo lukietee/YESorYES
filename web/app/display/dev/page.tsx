@@ -12,16 +12,17 @@ import type { AgentStatus, FishPos } from "@/lib/types";
 type View = "idle" | "countdown" | "decided-A" | "decided-B" | "executing";
 
 const SAMPLE_OPTIONS = {
-  a: "Text your ex again",
-  b: "Swipe up on random IG stories",
+  a: "Drunk-text your ex a 9-paragraph apology",
+  b: "DM 12 randoms 'wyd' until someone bites",
 };
 
 const SAMPLE_STATUSES: AgentStatus[] = [
-  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "opened Instagram", ts: 0 },
-  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "DMing @demo_friend1", ts: 0 },
-  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "DMing @demo_friend2", ts: 0 },
-  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "@demo_friend2 replied", ts: 0 },
-  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "done", detail: "first reply landed, stopping", ts: 0 },
+  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "opening Instagram on the fish's behalf", ts: 0 },
+  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "scrolling past 14 thirst traps", ts: 0 },
+  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "DM'ing @ex_who_ruined_us — 'u up'", ts: 0 },
+  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "DM'ing @girl_from_iceland_2023 — 'wyd'", ts: 0 },
+  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "progress", detail: "@girl_from_iceland_2023 is typing…", ts: 0 },
+  { taskId: "x", callSid: "x", stage: "ig-swipe", type: "done", detail: "she said 'lol who is this' — fish are pleased", ts: 0 },
 ];
 
 export default function DisplayDevPage() {
