@@ -7,6 +7,7 @@ import { FishTally } from "./components/FishTally";
 import { Countdown } from "./components/Countdown";
 import { ExecutingPanel } from "./components/ExecutingPanel";
 import { IntroIdle } from "./components/IntroIdle";
+import { CameraPreview } from "./components/CameraPreview";
 import { voteRule } from "@/lib/voteRule";
 import type {
   AgentStatus,
@@ -190,6 +191,8 @@ export function DisplayClient() {
           <ExecutingPanel history={statusHistory} />
         </div>
       )}
+
+      <CameraPreview size="md" position="top-4 right-4" />
 
       {/* tiny debug strip */}
       <div className="absolute bottom-2 right-4 text-xs text-slate-700 font-mono">
