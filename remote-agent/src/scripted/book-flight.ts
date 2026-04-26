@@ -1,33 +1,49 @@
 import type { ScriptedStep } from "./index.js";
+import type { Page } from "playwright";
+
+// book-flight: deep-link directly into Kayak with origin/dest preloaded.
+// Kayak's URL pattern /flights/<ORIGIN>-<DEST>/<DATE> renders the actual
+// search results page, not just a query.
+
+function dateNDaysOut(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+const A_DATE = dateNDaysOut(2);
+const B_DATE = dateNDaysOut(2);
 
 export const A: ScriptedStep[] = [
   {
-    detail: "opening Bing — the council does not do round trips",
-    run: async (page) => {
-      await page.goto("https://www.bing.com");
+    detail: "the council is opening Kayak — one-way to Iceland, no take-backs",
+    run: async (page: Page) => {
+      await page.goto(`https://www.kayak.com/flights/SFO-KEF/${A_DATE}`, {
+        waitUntil: "domcontentloaded",
+      });
     },
   },
   {
-    detail: "typing it out — you're going to Iceland and you'll like it, you scaleless dummy",
-    run: async (page) => {
-      await page.keyboard.type("one way flight SFO to Reykjavik tomorrow", { delay: 30 });
-      await page.keyboard.press("Enter");
+    detail: "results loading — say goodbye to your serotonin, you scaleless dummy",
+    run: async (page: Page) => {
+      await page.waitForTimeout(2500);
     },
   },
 ];
 
 export const B: ScriptedStep[] = [
   {
-    detail: "opening Bing — pack light, the fish have spoken",
-    run: async (page) => {
-      await page.goto("https://www.bing.com");
+    detail: "the council is opening Kayak — one-way to Tokyo, pack the jet lag",
+    run: async (page: Page) => {
+      await page.goto(`https://www.kayak.com/flights/SFO-HND/${B_DATE}`, {
+        waitUntil: "domcontentloaded",
+      });
     },
   },
   {
-    detail: "typing it out — enjoy the jet lag, land mammal",
-    run: async (page) => {
-      await page.keyboard.type("one way flight SFO to Tokyo tomorrow", { delay: 30 });
-      await page.keyboard.press("Enter");
+    detail: "results loading — enjoy the 14-hour overnight, land mammal",
+    run: async (page: Page) => {
+      await page.waitForTimeout(2500);
     },
   },
 ];

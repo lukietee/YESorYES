@@ -1,33 +1,39 @@
 import type { ScriptedStep } from "./index.js";
+import type { Page } from "playwright";
+
+// book-activity: deep-link into GetYourGuide with the search query preloaded.
+// Real activity listings render — looks like the agent shopped for it.
+
+const A_URL =
+  "https://www.getyourguide.com/s/?q=northern+lights+bus+tour+reykjavik";
+const B_URL = "https://www.getyourguide.com/s/?q=tokyo+ramen+tour";
 
 export const A: ScriptedStep[] = [
   {
-    detail: "opening Bing — bundle up, you frostbitten loner",
-    run: async (page) => {
-      await page.goto("https://www.bing.com");
+    detail: "opening GetYourGuide — bundle up, you frostbitten loner",
+    run: async (page: Page) => {
+      await page.goto(A_URL, { waitUntil: "domcontentloaded" });
     },
   },
   {
-    detail: "typing your sad little aurora pilgrimage into the search box",
-    run: async (page) => {
-      await page.keyboard.type("northern lights bus tour reykjavik solo traveler", { delay: 30 });
-      await page.keyboard.press("Enter");
+    detail: "tour listings loading — your aurora pilgrimage awaits, alone",
+    run: async (page: Page) => {
+      await page.waitForTimeout(2500);
     },
   },
 ];
 
 export const B: ScriptedStep[] = [
   {
-    detail: "opening Bing — loosen the belt, you noodle gremlin",
-    run: async (page) => {
-      await page.goto("https://www.bing.com");
+    detail: "opening GetYourGuide — loosen the belt, you noodle gremlin",
+    run: async (page: Page) => {
+      await page.goto(B_URL, { waitUntil: "domcontentloaded" });
     },
   },
   {
-    detail: "searching seven bowls of regret in one tragic night",
-    run: async (page) => {
-      await page.keyboard.type("tokyo ramen crawl 7 shops one night all you can eat", { delay: 30 });
-      await page.keyboard.press("Enter");
+    detail: "ramen tours loading — seven bowls of regret incoming",
+    run: async (page: Page) => {
+      await page.waitForTimeout(2500);
     },
   },
 ];

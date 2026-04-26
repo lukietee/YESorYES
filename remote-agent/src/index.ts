@@ -17,6 +17,7 @@ interface AgentTask {
   callSid: string;
   stage: Stage;
   chosen: "A" | "B";
+  text?: string;
   instruction: string;
   timeoutSec: number;
 }
