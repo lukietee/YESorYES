@@ -24,10 +24,9 @@ caller ── Twilio ──► bridge (Fly.io) ──► Deepgram (STT)
 
 1. **Caller dials** the Twilio number; audio streams into the **bridge**.
 2. **Bridge** transcribes with Deepgram, feeds the running transcript to **Claude**, and speaks Claude's replies back via ElevenLabs.
-3. Claude's persona is locked to three hardcoded scenarios (breakup / meeting / job-loss). When it hears one, it calls `present_options(stage, A, B)`. The bridge POSTs that to the **web** orchestration API, which writes Redis state and publishes to Pusher.
-4. The **TV display** subscribes to `options` and renders A vs B with a countdown. **Vision** publishes per-frame fish counts on `fish-pos` at 30 Hz; the display tallies which side has the majority over a 1-second rolling window.
-5. When the countdown ends, `/display` publishes a `decisions` event with `{stage, chosen, text, vote}`. The bridge's `wait_for_decision` tool unblocks, Claude announces the winner, then calls `dispatch_action(stage, chosen, text)`.
-6. The **remote-agent** is subscribed to `agent-tasks`, picks up the dispatch, and executes a **scripted Playwright + osascript flow** on a second MacBook (e.g. compose an iMessage, set a Reminder, draft an Outlook email, post to LinkedIn). Status updates stream back through Pusher to the TV.
+3. The **TV display** subscribes to `options` and renders A vs B with a countdown. **Vision** publishes per-frame fish counts on `fish-pos` at 30 Hz; the display tallies which side has the majority over a 1-second rolling window.
+4. When the countdown ends, `/display` publishes a `decisions` event with `{stage, chosen, text, vote}`. The bridge's `wait_for_decision` tool unblocks, Claude announces the winner, then calls `dispatch_action(stage, chosen, text)`.
+5. The **remote-agent** is subscribed to `agent-tasks`, picks up the dispatch, and executes a **scripted Playwright + osascript flow** on a second MacBook (e.g. compose an iMessage, set a Reminder, draft an Outlook email, post to LinkedIn). Status updates stream back through Pusher to the TV.
 
 ## The three scenarios
 
