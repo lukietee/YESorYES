@@ -100,7 +100,7 @@ For a real demo (no rotating sample options):
 python main.py --camera 0
 ```
 
-For a self-driving "pretend" demo (rotates 5 hard-coded option pairs every 7.5s, ignores the bridge):
+For a self-driving "pretend" demo (rotates a handful of sample option pairs every 7.5s, ignores the bridge):
 ```bash
 python main.py --pretend --camera 0
 ```
@@ -199,7 +199,7 @@ With both machines green:
 - **DeepgramError "API key required"** on first WebSocket: bridge isn't loading `.env`. Already fixed via `import "dotenv/config"` in `bridge/src/index.ts`.
 - **Greeting plays but second turn is silent**: ElevenLabs WS closes after `{text:""}` EOS. Already fixed — fresh TTS session per turn in `bridge/src/twilio/stream.ts`.
 - **`computer_20250124` not supported**: model was `claude-opus-4-7`; opus does not support computer-use. Already changed to `claude-sonnet-4-5` in `remote-agent/src/computerUse.ts`.
-- **Display shows "Pizza vs Sushi" / "Cats vs Dogs"**: those are pretend-mode options from `vision/main.py:52`. Either stop pretend mode or update the list.
+- **Display shows "Pizza vs Sushi" / "Cats vs Dogs"**: those are pretend-mode sample options from `vision/main.py:52`. Either stop pretend mode or swap the sample list.
 - **Stale "Dogs" decision sticks across refresh**: pre-fix bug. Press `r` on `/display` (now wired to `DELETE /api/state`).
 
 ---

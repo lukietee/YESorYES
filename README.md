@@ -24,21 +24,22 @@ caller ── Twilio ──► bridge (Fly.io) ──► Deepgram (STT)
 
 1. **Caller dials** the Twilio number; audio streams into the **bridge**.
 2. **Bridge** transcribes with Deepgram, feeds the running transcript to **Claude**, and speaks Claude's replies back via ElevenLabs.
-3. The **TV display** subscribes to `options` and renders A vs B with a countdown. **Vision** publishes per-frame fish counts on `fish-pos` at 30 Hz; the display tallies which side has the majority over a 1-second rolling window.
-4. When the countdown ends, `/display` publishes a `decisions` event with `{stage, chosen, text, vote}`. The bridge's `wait_for_decision` tool unblocks, Claude announces the winner, then calls `dispatch_action(stage, chosen, text)`.
-5. The **remote-agent** is subscribed to `agent-tasks`, picks up the dispatch, and executes a **scripted Playwright + osascript flow** on a second MacBook (e.g. compose an iMessage, set a Reminder, draft an Outlook email, post to LinkedIn). Status updates stream back through Pusher to the TV.
+3. Claude listens for whatever mess the caller is in, frames it as a binary choice, and calls `present_options(stage, A, B)`. The bridge POSTs that to the **web** orchestration API, which writes Redis state and publishes to Pusher.
+4. The **TV display** subscribes to `options` and renders A vs B with a countdown. **Vision** publishes per-frame fish counts on `fish-pos` at 30 Hz; the display tallies which side has the majority over a 1-second rolling window.
+5. When the countdown ends, `/display` publishes a `decisions` event with `{stage, chosen, text, vote}`. The bridge's `wait_for_decision` tool unblocks, Claude announces the winner, then calls `dispatch_action(stage, chosen, text)`.
+6. The **remote-agent** is subscribed to `agent-tasks`, picks up the dispatch, and carries the winning option out on a second MacBook — composing an iMessage, setting a Reminder, drafting an Outlook email, posting to LinkedIn, whatever the option calls for. Status updates stream back through Pusher to the TV.
 
-## The three scenarios
+## What the fish can do
 
-All three currently share `stage = "ig-swipe"`; the executed action is selected by the dispatched `text` field, not the stage.
+The persona is built around real-life "should I, or should I really" moments — breakups, missed meetings, getting laid off, and so on. Claude turns the caller's situation into a pair of options (one defensible, one regrettable), the council picks, and the remote agent makes it happen.
 
-| Scenario | Trigger | Option A (good-ish) | Option B (regrettable) |
-|---|---|---|---|
-| Breakup | "I broke up with…" | Text coworker | Text ex |
-| Meeting | "I forgot a meeting…" | Set a reminder | Email boss to frick off |
-| Job loss | "I got laid off…" | Beg for a job on LinkedIn | Post your `.env` on LinkedIn |
+| Vibe | Sample option A | Sample option B |
+|---|---|---|
+| Just-broke-up energy | Text a coworker | Text the ex |
+| Forgot a meeting | Set a reminder | Email your boss to frick off |
+| Got laid off | Beg for a job on LinkedIn | Post your `.env` on LinkedIn |
 
-Adding a scenario is two files: a new entry in `bridge/src/persona.ts` for the option strings, and a new script in `remote-agent/src/scripted/` registered in `TEXT_SCRIPTS`.
+The option set isn't fixed — Claude composes options live from the call, and new outcomes can be wired into the remote agent without touching the bridge.
 
 ## Layout
 
@@ -47,7 +48,7 @@ web/            Next.js + Vercel — TV display + orchestration HTTP API + Redis
 bridge/         Node service on Fly.io — Twilio call audio ↔ Deepgram ↔ Claude ↔ ElevenLabs
 vision/         Python on Mac mini — DJI Osmo Pocket 3 capture, OpenCV multi-fish detection,
                 live MJPEG preview server on :8765
-remote-agent/   Node on remote MacBook — scripted Playwright + osascript runner per scenario
+remote-agent/   Node on remote MacBook — Playwright + osascript runner that executes the chosen option
 scripts/        Mock event publisher for end-to-end smoke tests
 docs/           Per-component docs + hour-by-hour workflow + demo script
 ```
@@ -56,7 +57,7 @@ docs/           Per-component docs + hour-by-hour workflow + demo script
 
 1. `docs/00-overview.md` — system map and glossary.
 2. `docs/03-bridge.md` — call flow, tool calls, persona prompt.
-3. `docs/05-remote-agent.md` — scripted runner, adding scenarios.
+3. `docs/05-remote-agent.md` — how the remote agent picks up and runs an option.
 4. `docs/workflow.md` — hour-by-hour build order.
 5. Each runtime has its own README inside its folder.
 

@@ -1,6 +1,6 @@
 # 05 — Remote Agent (headless MacBook, Anthropic Computer Use)
 
-The arms and legs of the fish. Headless Node script that subscribes to `agent-tasks` and runs an Anthropic Computer Use loop on the remote MacBook for each task.
+The arms and legs of the fish. Headless Node script that subscribes to `agent-tasks` and runs an Anthropic Computer Use loop on the remote MacBook to carry out whichever option the council just picked.
 
 ## Tech
 
