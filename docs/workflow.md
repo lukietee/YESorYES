@@ -42,7 +42,7 @@ Sit together for this so nobody duplicates account creation.
 
 **B — bridge skeleton**
 - [ ] `bridge/` Node project with Fastify + WebSocket plugin.
-- [ ] `POST /twilio/voice` returns hardcoded TwiML. Deploy to Fly. Verify with `curl`.
+- [ ] `POST /twilio/voice` returns a static TwiML stub. Deploy to Fly. Verify with `curl`.
 - [ ] Wire Twilio number → bridge URL. Place a real call → confirm Twilio logs hit.
 - [ ] WS `/twilio` accepts the connection and logs `start` events. Hang up cleanly.
 
@@ -57,7 +57,7 @@ Sit together for this so nobody duplicates account creation.
 **B — bridge audio path (no LLM yet)**
 - [ ] Twilio Media Streams WS handler: parse media frames, base64 → bytes.
 - [ ] Pipe inbound audio to Deepgram streaming WS. Log transcripts on a real call.
-- [ ] Send a hardcoded ElevenLabs `ulaw_8000` clip back to Twilio on the WS. Confirm you hear it.
+- [ ] Send a canned ElevenLabs `ulaw_8000` clip back to Twilio on the WS. Confirm you hear it.
 
 **Checkpoint: Smoke #1 (vision) and Smoke #3 (bridge STT) green.**
 
@@ -121,7 +121,7 @@ Sit together. The hard part is making Claude reliably do *each* stage.
 - [ ] Per-stage timeouts.
 - [ ] Pre-record fallback clips per stage.
 - [ ] Log everything; rate-limit status posts.
-- [ ] Test all 4 stages individually with hardcoded options.
+- [ ] Test each stage individually with sample option pairs.
 
 ### H+30 → H+32 — Sleep block #2
 

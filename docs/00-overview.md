@@ -48,7 +48,7 @@ Twilio  →  bridge (Fly.io)  ←→  Deepgram + Claude + ElevenLabs
 
 ## Glossary
 
-- **Stage** — one segment of the call: `intro`, `ig-swipe`, `book-flight`, `book-activity`, `book-restaurant`.
+- **Stage** — one segment of the call (e.g. `intro`, then a decision stage like `ig-swipe`). Stages are how the bridge tags option/decision/dispatch events so each runtime knows which round it belongs to.
 - **Vote rule** — at countdown end, mode of per-frame majorities over a 1-second rolling window.
 - **Tool calls** — Claude function calls from inside the bridge: `present_options`, `wait_for_decision`, `dispatch_action`, `report_done`.
 - **Decision** — `{stage, chosen: "A"|"B", text, vote: {L, R}}` event published by `/display`.
